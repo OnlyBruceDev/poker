@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestión de Clientes</title>
+
+  <!-- Material Icons -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+  <!-- Archivo de estilos -->
+  <link rel="stylesheet" href="./styles2.css">
+
+  <!-- Firebase (compat) -->
+  <script defer src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+
+  <!-- SheetJS Library para exportar a XLSX -->
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <!-- Archivo JavaScript principal -->
+  <script defer src="./cobro.js"></script>
+</head>
+<body>
+  <!-- Contenedor de Login -->
+  <div id="login-container" class="login-container">
+    <div class="login-card">
+      <h2>Bienvenido</h2>
+      <img src="./cerrito.png" alt="Imagen de bienvenida">
+      <input id="username" type="email" placeholder="Correo" required>
+      <input id="password" type="password" placeholder="Contraseña" required>
+      <button id="login-btn" class="btn">Ingresar</button>
+    </div>
+    <footer>
+      <p>by: Cerrito Poker</p>
+    </footer>
+  </div>
+
+  <!-- Contenedor de la Aplicación -->
+  <div id="app-container" class="app-container hidden">
+    <header class="app-header">
+      <h1>Gestión de Sopletes</h1>
+      <button id="logout-btn" class="logout-btn">Salir</button>
+    </header>
+
+    <!-- Pestañas: Clientes, Métricas, Premios y Temporizador -->
+    <div class="tabs">
+      <div id="tab-clients" class="tab active">Clientes</div>
+      <div id="tab-metrics" class="tab">Métricas</div>
+      <div id="tab-premios" class="tab">Premios</div>
+      <div id="tab-timer" class="tab">Temporizador</div>
+    </div>
+
+    <main class="app-content">
+      <!-- Sección de Clientes -->
+      <section id="client-section" class="client-section">
+        <!-- Configurar precios -->
+        <section class="price-section">
+          <button id="toggle-prices-btn" class="btn-toggle">Configurar Precios</button>
+          <div id="price-settings" class="price-settings hidden">
+            <div class="price-input">
+              <label for="entrada-price">Entrada</label>
+              <input id="entrada-price" type="number" value="40">
+            </div>
+            <div class="price-input">
+              <label for="recompra-price">Recompra</label>
+              <input id="recompra-price" type="number" value="20">
+            </div>
+            <div class="price-input">
+              <label for="adicion-price">Adición</label>
+              <input id="adicion-price" type="number" value="50">
+            </div>
+            <button id="update-prices-btn" class="btn">Actualizar</button>
+          </div>
+        </section>
+
+        <!-- Alta de clientes -->
+        <div class="client-add">
+          <input id="client-name" type="text" placeholder="Nombre del cliente">
+          <button id="add-client-btn" class="btn-add">Agregar</button>
+        </div>
+
+        <!-- Campo de búsqueda -->
+        <div class="client-search">
+          <input id="client-search" type="text" placeholder="Buscar jugador…">
+        </div>
+
+        <!-- Recaudo -->
+        <div class="revenue">
+          <p id="total-revenue">Total Recaudado: $0</p>
+        </div>
+
+        <!-- Exportar -->
+        <button id="export-excel-btn" class="icon-btn" title="Exportar a Excel">
+          <i class="material-icons">file_download</i>
+        </button>
+
+        <!-- Lista de clientes -->
+        <div class="client-cards" id="client-list">
+          <!-- Tarjetas generadas dinámicamente -->
+        </div>
+      </section>
+
+      <!-- Sección de Métricas -->
+      <section id="metrics-section" class="metrics-section hidden">
+        <h2>Métricas</h2>
+        <div class="metrics-config">
+          <label for="chip-entrada">Fichas por Entrada:</label>
+          <input id="chip-entrada" type="number" value="40000">
+          <label for="chip-recompra">Fichas por Recompra:</label>
+          <input id="chip-recompra" type="number" value="40000">
+          <label for="chip-adicion">Fichas por Adición:</label>
+          <input id="chip-adicion" type="number" value="240000">
+        </div>
+        <div class="metrics-data">
+          <p id="total-clients">Total de Clientes: 0</p>
+          <p id="total-entradas">Total de Entradas: 0</p>
+          <p id="total-recompras">Total de Recompras: 0</p>
+          <p id="total-adiciones">Total de Adiciones: 0</p>
+          <p id="total-fichas">Total de Fichas: 0</p>
+          <p id="stack-promedio">Stack Promedio: 0</p>
+        </div>
+      </section>
+
+      <!-- Sección de Premios -->
+      <section id="premios-section" class="premios-section hidden">
+        <h2>Premios</h2>
+        <div class="premios-config">
+          <label for="valor-total-premio">Valor Total a Premiar:</label>
+          <input id="valor-total-premio" type="number" placeholder="Ingrese total a premiar">
+        </div>
+        <div class="premios-config">
+          <label for="cantidad-premiados">Cantidad de Premiados:</label>
+          <input id="cantidad-premiados" type="number" placeholder="Ingrese cantidad" min="1">
+        </div>
+        <div id="premios-cajas" class="premios-cajas"></div>
+        <p id="valor-restante">Valor Restante: 0</p>
+      </section>
+
+      <!-- Sección del Temporizador -->
+      <section id="timer-section" class="timer-section hidden">
+        <div class="timer-controls">
+          <button id="start-timer-btn" class="btn timer-btn" title="Iniciar">
+            <i class="material-icons">play_arrow</i>
+          </button>
+          <button id="pause-timer-btn" class="btn timer-btn" title="Pausar">
+            <i class="material-icons">pause</i>
+          </button>
+          <button id="reset-timer-btn" class="btn timer-btn" title="Reiniciar Temporizador">
+            <i class="material-icons">restart_alt</i>
+          </button>
+          <button id="restart-level-btn" class="btn timer-btn" title="Reiniciar Nivel">
+            <i class="material-icons">replay</i>
+          </button>
+        </div>
+
+        <button id="toggle-fullscreen-btn" class="btn timer-btn" title="Pantalla completa">
+          <i class="material-icons" id="fullscreen-icon">fullscreen</i>
+        </button>
+
+        <div class="timer-card">
+          <div class="timer-header">
+            <h2>Temporizador de Torneos</h2>
+          </div>
+          <div class="timer-display">
+            <div class="timer-circle">
+              <svg class="circle-progress" viewBox="0 0 100 100">
+                <circle class="circle-bg" cx="50" cy="50" r="45"></circle>
+                <circle class="circle-fg" cx="50" cy="50" r="45"></circle>
+              </svg>
+              <div class="timer-text">
+                <p id="timer-countdown">00:00</p>
+              </div>
+            </div>
+            <p id="current-level" class="timer-level">Nivel: 1 – Ciegas: N/A</p>
+          </div>
+
+          <button id="toggle-timer-config-btn" class="btn timer-config-btn">Editar Configuración</button>
+          <div id="timer-config" class="timer-config hidden">
+            <h3>Configuración</h3>
+            <table class="level-table">
+              <thead>
+                <tr>
+                  <th>Nivel</th>
+                  <th>Ronda (min)</th>
+                  <th>Ciegas</th>
+                  <th>Eliminar</th>
+                </tr>
+              </thead>
+              <tbody id="levels-container">
+                <tr class="level">
+                  <td>1</td>
+                  <td><input type="number" class="round-duration" value="10"></td>
+                  <td><input type="text" class="blinds" placeholder="Ej. 50/100"></td>
+                  <td><button class="delete-level-btn btn">X</button></td>
+                </tr>
+              </tbody>
+            </table>
+            <button id="add-level-btn" class="btn">Agregar Nivel</button>
+            <button id="save-timer-config-btn" class="btn">Guardar Configuración</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer>
+    <p>by: Cerrito Poker</p>
+  </footer>
+</body>
+</html>
