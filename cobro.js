@@ -19,6 +19,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // NUEVA variable global con todos los clientes para filtrar
   let currentClients = {};
+  // Inventario y jugadores para sección Libre
+  const chipStock = {};
+  const librePlayers = {};
 
   // Forzar cierre de sesión para desarrollo
   auth.signOut();
@@ -288,10 +291,12 @@ incBtn.addEventListener("click", e => {
   const tabMetrics = document.getElementById("tab-metrics");
   const tabPremios = document.getElementById("tab-premios");
   const tabTimer = document.getElementById("tab-timer");
+  const tabLibre = document.getElementById("tab-libre");
   const clientSection = document.getElementById("client-section");
   const metricsSection = document.getElementById("metrics-section");
   const premiosSection = document.getElementById("premios-section");
   const timerSection = document.getElementById("timer-section");
+  const libreSection = document.getElementById("libre-section");
 
   tabClients.addEventListener("click", () => {
     tabClients.classList.add("active");
@@ -328,10 +333,24 @@ incBtn.addEventListener("click", e => {
     tabClients.classList.remove("active");
     tabMetrics.classList.remove("active");
     tabPremios.classList.remove("active");
+    tabLibre.classList.remove("active");
     timerSection.classList.remove("hidden");
     clientSection.classList.add("hidden");
     metricsSection.classList.add("hidden");
     premiosSection.classList.add("hidden");
+    libreSection.classList.add("hidden");
+  });
+  if (tabLibre) tabLibre.addEventListener("click", () => {
+    tabLibre.classList.add("active");
+    tabClients.classList.remove("active");
+    tabMetrics.classList.remove("active");
+    tabPremios.classList.remove("active");
+    tabTimer.classList.remove("active");
+    libreSection.classList.remove("hidden");
+    clientSection.classList.add("hidden");
+    metricsSection.classList.add("hidden");
+    premiosSection.classList.add("hidden");
+    timerSection.classList.add("hidden");
   });
 
   // =====================
@@ -640,6 +659,90 @@ incBtn.addEventListener("click", e => {
       timerConfig.classList.toggle("hidden");
     });
   }
+
+  /* =====================
+       SECCIÓN LIBRE
+  ===================== */
+  function renderLibre() {
+    const stockList = document.getElementById("chip-stock-list");
+    if (stockList) {
+      stockList.innerHTML = "";
+      Object.entries(chipStock).forEach(([color, qty]) => {
+        const div = document.createElement("div");
+        div.className = "chip-stock-item";
+        div.textContent = `${color}: ${qty}`;
+        stockList.appendChild(div);
+      });
+    }
+
+    const playersList = document.getElementById("libre-players-list");
+    if (playersList) {
+      playersList.innerHTML = "";
+      Object.entries(librePlayers).forEach(([name, chips]) => {
+        const container = document.createElement("div");
+        container.className = "player-item";
+        const title = document.createElement("h4");
+        title.textContent = name;
+        container.appendChild(title);
+        const table = document.createElement("table");
+        const tbody = document.createElement("tbody");
+        Object.keys(chipStock).forEach(color => {
+          const tr = document.createElement("tr");
+          const tdColor = document.createElement("td");
+          tdColor.textContent = color;
+          const tdInput = document.createElement("td");
+          const input = document.createElement("input");
+          input.type = "number";
+          input.min = 0;
+          input.value = chips[color] || 0;
+          input.addEventListener("change", () => {
+            let value = parseInt(input.value) || 0;
+            if (value < 0) value = 0;
+            const prev = chips[color] || 0;
+            const diff = value - prev;
+            if (diff > 0 && (chipStock[color] || 0) < diff) {
+              alert(`No hay suficientes fichas de ${color}`);
+              input.value = prev;
+              return;
+            }
+            chips[color] = value;
+            chipStock[color] = (chipStock[color] || 0) - diff;
+            renderLibre();
+          });
+          tdInput.appendChild(input);
+          tr.appendChild(tdColor);
+          tr.appendChild(tdInput);
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        container.appendChild(table);
+        playersList.appendChild(container);
+      });
+    }
+  }
+
+  document.getElementById("add-chip-color-btn")?.addEventListener("click", () => {
+    const colorInput = document.getElementById("chip-color-input");
+    const qtyInput = document.getElementById("chip-qty-input");
+    const color = colorInput.value.trim();
+    const qty = parseInt(qtyInput.value) || 0;
+    if (!color || qty <= 0) return alert("Ingrese color y cantidad válidos.");
+    chipStock[color] = (chipStock[color] || 0) + qty;
+    colorInput.value = "";
+    qtyInput.value = "";
+    renderLibre();
+  });
+
+  document.getElementById("add-libre-player-btn")?.addEventListener("click", () => {
+    const nameInput = document.getElementById("libre-player-name");
+    const name = nameInput.value.trim();
+    if (!name) return;
+    if (!librePlayers[name]) librePlayers[name] = {};
+    nameInput.value = "";
+    renderLibre();
+  });
+
+  renderLibre();
   updatePricesUI();
 });
 
