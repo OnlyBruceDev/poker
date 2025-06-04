@@ -139,6 +139,31 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 0);
   }
 
+  /* ===== EXPORTAR EXCEL ===== */
+  document.getElementById("export-excel-btn")?.addEventListener("click", () => {
+    const data = Object.values(currentClients).map(c => {
+      const counts = c.beerCounts || {};
+      const entrada  = counts.Entrada  || 0;
+      const recompra = counts.Recompra || 0;
+      const adicion  = counts.Adicion  || 0;
+      const total = entrada * prices.Entrada +
+                    recompra * prices.Recompra +
+                    adicion * prices.Adicion;
+      return {
+        Nombre: c.name,
+        Entradas: entrada,
+        Recompras: recompra,
+        Adiciones: adicion,
+        Total: total
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Clientes");
+    XLSX.writeFile(workbook, "clientes.xlsx");
+  });
+
   /* ===== BÚSQUEDA ===== */
   document.getElementById("client-search")?.addEventListener("input", () => {
     renderClients(currentClients);
