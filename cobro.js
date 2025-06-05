@@ -17,8 +17,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Estado colapsado de las tarjetas
   let cardCollapseState = {};
 
-  // NUEVA variable global con todos los clientes para filtrar
+  // Variables globales de clientes
   let currentClients = {};
+  let currentLibreClients = {};
 
   // Forzar cierre de sesión para desarrollo
   auth.signOut();
@@ -90,6 +91,7 @@ document.addEventListener("DOMContentLoaded", () => {
        CLIENTES
   ===================== */
   const clientsRef = database.ref("clients");
+  const libreClientsRef = database.ref("libreClients");
 
   clientsRef.on("value", snapshot => {
     currentClients = snapshot.val() || {};
@@ -97,10 +99,23 @@ document.addEventListener("DOMContentLoaded", () => {
     renderMetrics(currentClients);
   });
 
+  libreClientsRef.on("value", snapshot => {
+    currentLibreClients = snapshot.val() || {};
+    renderLibreClients(currentLibreClients);
+  });
+
   function addClient(name) {
     clientsRef.push({
       name,
       beerCounts: { Entrada: 0, Recompra: 0, Adicion: 0 },
+      createdAt: firebase.database.ServerValue.TIMESTAMP
+    });
+  }
+
+  function addLibreClient(name) {
+    libreClientsRef.push({
+      name,
+      chips: 0,
       createdAt: firebase.database.ServerValue.TIMESTAMP
     });
   }
@@ -116,14 +131,33 @@ document.addEventListener("DOMContentLoaded", () => {
     input.value = "";
   });
 
+  document.getElementById("add-libre-client-btn")?.addEventListener("click", () => {
+    const input = document.getElementById("libre-client-name");
+    const name  = input.value.trim();
+    if (!name) return alert("Por favor ingresa un nombre de cliente.");
+    const exists = Object.values(currentLibreClients).some(c => c.name.toLowerCase() === name.toLowerCase());
+    if (exists) return alert("Ya existe un cliente con ese nombre.");
+    addLibreClient(name);
+    input.value = "";
+  });
+
   function updateBeerCount(clientKey, beerType, increment) {
     const ref = database.ref(`clients/${clientKey}/beerCounts/${beerType}`);
+    ref.transaction(count => Math.max(0, (count || 0) + increment));
+  }
+
+  function updateLibreChips(clientKey, increment) {
+    const ref = database.ref(`libreClients/${clientKey}/chips`);
     ref.transaction(count => Math.max(0, (count || 0) + increment));
   }
 
   function toggleBeerCount(clientKey, beerType) {
     const ref = database.ref(`clients/${clientKey}/beerCounts/${beerType}`);
     ref.transaction(val => (val === 1 ? 0 : 1));
+  }
+
+  function deleteLibreClient(clientKey) {
+    database.ref(`libreClients/${clientKey}`).remove();
   }
 
   function deleteClient(clientKey) {
@@ -139,9 +173,20 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 0);
   }
 
+  function calculateLibreRevenue(clients, chipValue) {
+    return Object.values(clients).reduce((total, c) => {
+      const chips = c.chips || 0;
+      return total + chips * chipValue;
+    }, 0);
+  }
+
   /* ===== BÚSQUEDA ===== */
   document.getElementById("client-search")?.addEventListener("input", () => {
     renderClients(currentClients);
+  });
+
+  document.getElementById("libre-client-search")?.addEventListener("input", () => {
+    renderLibreClients(currentLibreClients);
   });
 
   /* =====================
@@ -254,6 +299,77 @@ incBtn.addEventListener("click", e => {
     totalRevenueEl.textContent = `Total Recaudado: $${calculateTotalRevenue(filtered.reduce((obj,[k,v])=>{obj[k]=v;return obj;},{})).toLocaleString()}`;
   }
 
+  function renderLibreClients(clients) {
+    const clientList     = document.getElementById("libre-client-list");
+    const totalRevenueEl = document.getElementById("libre-total-revenue");
+    if (!clientList || !totalRevenueEl) return;
+
+    const chipValue = +document.getElementById("libre-chip-value").value || 0;
+    const term = (document.getElementById("libre-client-search")?.value || "").trim().toLowerCase();
+    const entries = Object.entries(clients).sort(([,a],[,b]) => {
+      const t1 = typeof a.createdAt === 'number' ? a.createdAt : Number.MAX_SAFE_INTEGER;
+      const t2 = typeof b.createdAt === 'number' ? b.createdAt : Number.MAX_SAFE_INTEGER;
+      return t1 - t2;
+    });
+    const filtered = entries.filter(([, c]) => c.name.toLowerCase().includes(term));
+
+    clientList.innerHTML = "";
+    let total = 0;
+
+    filtered.forEach(([key, client], index) => {
+      const card = document.createElement("div");
+      card.className = "client-card";
+
+      const header = document.createElement("div");
+      header.className = "client-card-header";
+      header.innerHTML = `<h3>${index + 1}. ${client.name}</h3>`;
+      card.appendChild(header);
+
+      const countsDiv = document.createElement("div");
+      countsDiv.className = "client-card-counts";
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "client-card-count";
+      wrapper.innerHTML = `<span>Fichas</span>`;
+
+      const val = document.createElement("span");
+      val.className = "count-value";
+      const count = client.chips || 0;
+      val.textContent = count;
+      wrapper.appendChild(val);
+
+      const controls = document.createElement("div");
+      controls.className = "count-controls";
+      controls.innerHTML = `
+        <button class="action-btn arrow-btn">&lt;</button>
+        <button class="action-btn arrow-btn">&gt;</button>`;
+      const [decBtn, incBtn] = controls.querySelectorAll("button");
+      decBtn.addEventListener("click", e => { e.stopPropagation(); updateLibreChips(key, -1); });
+      incBtn.addEventListener("click", e => { e.stopPropagation(); updateLibreChips(key, 1); });
+      wrapper.appendChild(controls);
+
+      countsDiv.appendChild(wrapper);
+      card.appendChild(countsDiv);
+
+      const totalDiv = document.createElement("div");
+      totalDiv.className = "client-card-total";
+      const playerTotal = count * chipValue;
+      total += playerTotal;
+      totalDiv.textContent = `Total: $${playerTotal.toLocaleString()}`;
+      card.appendChild(totalDiv);
+
+      const actions = document.createElement("div");
+      actions.className = "client-card-actions";
+      actions.innerHTML = `<button class="action-btn delete-btn"><i class="material-icons">delete</i></button>`;
+      actions.querySelector(".delete-btn").addEventListener("click", e => { e.stopPropagation(); deleteLibreClient(key); });
+      card.appendChild(actions);
+
+      clientList.appendChild(card);
+    });
+
+    totalRevenueEl.textContent = `Total Recaudado: $${total.toLocaleString()}`;
+  }
+
   function renderMetrics(clients) {
     const totalClients = Object.keys(clients).length;
     let entradas = 0, recompras = 0, adiciones = 0;
@@ -285,20 +401,37 @@ incBtn.addEventListener("click", e => {
   //   PESTAÑAS
   // =====================
   const tabClients = document.getElementById("tab-clients");
+  const tabLibre = document.getElementById("tab-libre");
   const tabMetrics = document.getElementById("tab-metrics");
   const tabPremios = document.getElementById("tab-premios");
   const tabTimer = document.getElementById("tab-timer");
   const clientSection = document.getElementById("client-section");
+  const libreSection = document.getElementById("libre-section");
   const metricsSection = document.getElementById("metrics-section");
   const premiosSection = document.getElementById("premios-section");
   const timerSection = document.getElementById("timer-section");
 
   tabClients.addEventListener("click", () => {
     tabClients.classList.add("active");
+    tabLibre.classList.remove("active");
     tabMetrics.classList.remove("active");
     tabPremios.classList.remove("active");
     tabTimer.classList.remove("active");
     clientSection.classList.remove("hidden");
+    libreSection.classList.add("hidden");
+    metricsSection.classList.add("hidden");
+    premiosSection.classList.add("hidden");
+    timerSection.classList.add("hidden");
+  });
+
+  tabLibre.addEventListener("click", () => {
+    tabLibre.classList.add("active");
+    tabClients.classList.remove("active");
+    tabMetrics.classList.remove("active");
+    tabPremios.classList.remove("active");
+    tabTimer.classList.remove("active");
+    libreSection.classList.remove("hidden");
+    clientSection.classList.add("hidden");
     metricsSection.classList.add("hidden");
     premiosSection.classList.add("hidden");
     timerSection.classList.add("hidden");
@@ -306,30 +439,36 @@ incBtn.addEventListener("click", e => {
   tabMetrics.addEventListener("click", () => {
     tabMetrics.classList.add("active");
     tabClients.classList.remove("active");
+    tabLibre.classList.remove("active");
     tabPremios.classList.remove("active");
     tabTimer.classList.remove("active");
     metricsSection.classList.remove("hidden");
     clientSection.classList.add("hidden");
+    libreSection.classList.add("hidden");
     premiosSection.classList.add("hidden");
     timerSection.classList.add("hidden");
   });
   tabPremios.addEventListener("click", () => {
     tabPremios.classList.add("active");
     tabClients.classList.remove("active");
+    tabLibre.classList.remove("active");
     tabMetrics.classList.remove("active");
     tabTimer.classList.remove("active");
     premiosSection.classList.remove("hidden");
     clientSection.classList.add("hidden");
+    libreSection.classList.add("hidden");
     metricsSection.classList.add("hidden");
     timerSection.classList.add("hidden");
   });
   tabTimer.addEventListener("click", () => {
     tabTimer.classList.add("active");
     tabClients.classList.remove("active");
+    tabLibre.classList.remove("active");
     tabMetrics.classList.remove("active");
     tabPremios.classList.remove("active");
     timerSection.classList.remove("hidden");
     clientSection.classList.add("hidden");
+    libreSection.classList.add("hidden");
     metricsSection.classList.add("hidden");
     premiosSection.classList.add("hidden");
   });
