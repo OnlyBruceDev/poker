@@ -431,6 +431,28 @@ footer {
 }
 
 /* =====================
+   SECCIÓN LIBRE
+======================= */
+.libre-config {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.libre-config label {
+  font-size: 14px;
+}
+.libre-config input {
+  width: 80px;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  text-align: center;
+}
+
+/* =====================
    SECCIÓN DE MÉTRICAS
 ======================= */
 .metrics-section {
