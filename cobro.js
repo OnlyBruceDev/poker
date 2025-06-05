@@ -176,9 +176,10 @@ document.addEventListener("DOMContentLoaded", () => {
        RENDERIZACIÓN
   ===================== */
   function renderClients(clients) {
-    const clientList     = document.getElementById("client-list");
+    const listIds = ["client-list", "libre-client-list"];
+    const lists = listIds.map(id => document.getElementById(id)).filter(Boolean);
     const totalRevenueEl = document.getElementById("total-revenue");
-    if (!clientList || !totalRevenueEl) return;
+    if (lists.length === 0 || !totalRevenueEl) return;
 
     const term = (document.getElementById("client-search")?.value || "").trim().toLowerCase();
     const entries = Object.entries(clients).sort(([,a],[,b]) => {
@@ -189,9 +190,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const filtered = entries.filter(([, c]) => c.name.toLowerCase().includes(term));
 
-    clientList.innerHTML = "";
+    lists.forEach(l => l.innerHTML = "");
 
-    filtered.forEach(([key, client], index) => {
+    function buildCard(key, client, index) {
       const card = document.createElement("div");
       card.className = "client-card" + (cardCollapseState[key] ? " collapsed" : "");
 
@@ -301,12 +302,18 @@ incBtn.addEventListener("click", e => {
         <button class="action-btn delete-btn"><i class="material-icons">delete</i></button>
         <input type="checkbox" class="client-checkbox">`;
       actions.querySelector(".delete-btn").addEventListener("click", e => {
-  e.stopPropagation();                // evita colapso accidental
-  deleteClient(key);
-});
+        e.stopPropagation();
+        deleteClient(key);
+      });
       card.appendChild(actions);
+      return card;
+    }
 
-      clientList.appendChild(card);
+    lists.forEach(list => {
+      filtered.forEach(([key, client], index) => {
+        const card = buildCard(key, client, index);
+        list.appendChild(card);
+      });
     });
 
     totalRevenueEl.textContent = `Total Recaudado: $${calculateTotalRevenue(filtered.reduce((obj,[k,v])=>{obj[k]=v;return obj;},{})).toLocaleString()}`;
@@ -356,34 +363,52 @@ incBtn.addEventListener("click", e => {
   // =====================
   const tabClients = document.getElementById("tab-clients");
   const tabMetrics = document.getElementById("tab-metrics");
+  const tabLibre  = document.getElementById("tab-libre");
   const tabPremios = document.getElementById("tab-premios");
   const clientSection = document.getElementById("client-section");
   const metricsSection = document.getElementById("metrics-section");
+  const libreSection  = document.getElementById("libre-section");
   const premiosSection = document.getElementById("premios-section");
 
   tabClients.addEventListener("click", () => {
     tabClients.classList.add("active");
     tabMetrics.classList.remove("active");
+    tabLibre.classList.remove("active");
     tabPremios.classList.remove("active");
     clientSection.classList.remove("hidden");
     metricsSection.classList.add("hidden");
+    libreSection.classList.add("hidden");
     premiosSection.classList.add("hidden");
   });
   tabMetrics.addEventListener("click", () => {
     tabMetrics.classList.add("active");
     tabClients.classList.remove("active");
+    tabLibre.classList.remove("active");
     tabPremios.classList.remove("active");
     metricsSection.classList.remove("hidden");
     clientSection.classList.add("hidden");
+    libreSection.classList.add("hidden");
+    premiosSection.classList.add("hidden");
+  });
+  tabLibre.addEventListener("click", () => {
+    tabLibre.classList.add("active");
+    tabClients.classList.remove("active");
+    tabMetrics.classList.remove("active");
+    tabPremios.classList.remove("active");
+    libreSection.classList.remove("hidden");
+    clientSection.classList.add("hidden");
+    metricsSection.classList.add("hidden");
     premiosSection.classList.add("hidden");
   });
   tabPremios.addEventListener("click", () => {
     tabPremios.classList.add("active");
     tabClients.classList.remove("active");
     tabMetrics.classList.remove("active");
+    tabLibre.classList.remove("active");
     premiosSection.classList.remove("hidden");
     clientSection.classList.add("hidden");
     metricsSection.classList.add("hidden");
+    libreSection.classList.add("hidden");
   });
 
   // =====================

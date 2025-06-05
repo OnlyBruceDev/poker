@@ -480,6 +480,12 @@ footer {
   border-radius: 12px;
   text-align: center;
 }
+.libre-section {
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 12px;
+  text-align: center;
+}
 .premios-section h2 {
   margin-bottom: 20px;
   font-size: 24px;

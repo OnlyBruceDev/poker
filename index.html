@@ -48,6 +48,7 @@
     <div class="tabs">
       <div id="tab-clients" class="tab active">Clientes</div>
       <div id="tab-metrics" class="tab">Métricas</div>
+      <div id="tab-libre" class="tab">Libre</div>
       <div id="tab-premios" class="tab">Premios</div>
     </div>
 
@@ -95,17 +96,6 @@
           <i class="material-icons">file_download</i>
         </button>
 
-        <!-- Tipos de fichas -->
-        <section class="chip-types-section">
-          <h3>Tipos de Ficha</h3>
-          <div id="chip-types-list" class="chip-types-list"></div>
-          <div class="chip-add">
-            <input id="chip-color" type="text" placeholder="Color">
-            <input id="chip-qty" type="number" placeholder="Cantidad">
-            <input id="chip-value" type="number" placeholder="Valor">
-            <button id="add-chip-type-btn" class="btn">Agregar Ficha</button>
-          </div>
-        </section>
 
         <!-- Lista de clientes -->
         <div class="client-cards" id="client-list">
@@ -133,6 +123,22 @@
           <p id="stack-promedio">Stack Promedio: 0</p>
         </div>
 
+      </section>
+
+      <!-- Sección Libre -->
+      <section id="libre-section" class="libre-section hidden">
+        <h2>Libre</h2>
+        <section class="chip-types-section">
+          <h3>Tipos de Ficha</h3>
+          <div id="chip-types-list" class="chip-types-list"></div>
+          <div class="chip-add">
+            <input id="chip-color" type="text" placeholder="Color">
+            <input id="chip-qty" type="number" placeholder="Cantidad">
+            <input id="chip-value" type="number" placeholder="Valor">
+            <button id="add-chip-type-btn" class="btn">Agregar Ficha</button>
+          </div>
+        </section>
+        <div class="client-cards" id="libre-client-list"></div>
       </section>
 
       <!-- Sección de Premios -->
