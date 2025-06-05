@@ -40,7 +40,7 @@
   <!-- Contenedor de la Aplicación -->
   <div id="app-container" class="app-container hidden">
     <header class="app-header">
-      <h1>Gestión de Sopletes</h1>
+      <h1>Gestión de Clientes</h1>
       <button id="logout-btn" class="logout-btn">Salir</button>
     </header>
 
@@ -50,6 +50,7 @@
       <div id="tab-metrics" class="tab">Métricas</div>
       <div id="tab-premios" class="tab">Premios</div>
       <div id="tab-timer" class="tab">Temporizador</div>
+      <div id="tab-libre" class="tab">Libre</div>
     </div>
 
     <main class="app-content">
@@ -211,6 +212,26 @@
             <button id="add-level-btn" class="btn">Agregar Nivel</button>
             <button id="save-timer-config-btn" class="btn">Guardar Configuración</button>
           </div>
+        </div>
+      </section>
+
+      <!-- Sección Libre -->
+      <section id="libre-section" class="libre-section hidden">
+        <h2>Gestión Libre de Fichas</h2>
+
+        <div class="chip-management">
+          <h3>Agregar Fichas</h3>
+          <input id="chip-color-input" type="text" placeholder="Color">
+          <input id="chip-qty-input" type="number" placeholder="Cantidad">
+          <button id="add-chip-color-btn" class="btn">Agregar Fichas</button>
+          <div id="chip-stock-list"></div>
+        </div>
+
+        <div class="player-management">
+          <h3>Agregar Jugador</h3>
+          <input id="libre-player-name" type="text" placeholder="Nombre del jugador">
+          <button id="add-libre-player-btn" class="btn">Agregar Jugador</button>
+          <div id="libre-players-list"></div>
         </div>
       </section>
     </main>

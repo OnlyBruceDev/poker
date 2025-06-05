@@ -307,7 +307,7 @@ footer {
   min-width: 180px;
 }
 
-/* NUEVA BÚSQUEDA */
+/* Estilos de la búsqueda */
 .client-search {
   margin-bottom: 20px;
 }
@@ -883,4 +883,32 @@ footer {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+}
+
+/* =====================
+   SECCIÓN LIBRE
+======================= */
+.libre-section {
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 12px;
+  text-align: center;
+}
+.libre-section input {
+  margin: 5px;
+  padding: 6px;
+  border: none;
+  border-radius: 4px;
+}
+.chip-stock-item, .player-item {
+  margin-top: 10px;
+}
+.libre-section table {
+  margin: 10px auto;
+  border-collapse: collapse;
+}
+.libre-section th, .libre-section td {
+  border: 1px solid #555;
+  padding: 6px;
+  color: #fff;
 }
