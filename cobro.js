@@ -20,6 +20,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // NUEVA variable global con todos los clientes para filtrar
   let currentClients = {};
 
+  // Tipos de fichas configurados
+  let chipTypes = {};
+
   // Forzar cierre de sesión para desarrollo
   auth.signOut();
 
@@ -86,10 +89,29 @@ document.addEventListener("DOMContentLoaded", () => {
     alert("Precios actualizados");
   });
 
+  // Agregar tipo de ficha
+  document.getElementById("add-chip-type-btn")?.addEventListener("click", () => {
+    const color = document.getElementById("chip-color").value.trim();
+    const quantity = parseInt(document.getElementById("chip-qty").value) || 0;
+    const value = parseFloat(document.getElementById("chip-value").value) || 0;
+    if (!color) return alert("Ingresa color de ficha");
+    chipTypesRef.child(color).set({ quantity, value });
+    document.getElementById("chip-color").value = "";
+    document.getElementById("chip-qty").value = "";
+    document.getElementById("chip-value").value = "";
+  });
+
   /* =====================
        CLIENTES
   ===================== */
   const clientsRef = database.ref("clients");
+  const chipTypesRef = database.ref("chipTypes");
+
+  chipTypesRef.on("value", snapshot => {
+    chipTypes = snapshot.val() || {};
+    renderChipTypes();
+    renderClients(currentClients);
+  });
 
   clientsRef.on("value", snapshot => {
     currentClients = snapshot.val() || {};
@@ -101,6 +123,7 @@ document.addEventListener("DOMContentLoaded", () => {
     clientsRef.push({
       name,
       beerCounts: { Entrada: 0, Recompra: 0, Adicion: 0 },
+      chips: {},
       createdAt: firebase.database.ServerValue.TIMESTAMP
     });
   }
@@ -126,6 +149,11 @@ document.addEventListener("DOMContentLoaded", () => {
     ref.transaction(val => (val === 1 ? 0 : 1));
   }
 
+  function updateChipCount(clientKey, chipType, increment) {
+    const ref = database.ref(`clients/${clientKey}/chips/${chipType}`);
+    ref.transaction(count => Math.max(0, (count || 0) + increment));
+  }
+
   function deleteClient(clientKey) {
     database.ref(`clients/${clientKey}`).remove();
   }
@@ -148,9 +176,10 @@ document.addEventListener("DOMContentLoaded", () => {
        RENDERIZACIÓN
   ===================== */
   function renderClients(clients) {
-    const clientList     = document.getElementById("client-list");
+    const listIds = ["client-list", "libre-client-list"];
+    const lists = listIds.map(id => document.getElementById(id)).filter(Boolean);
     const totalRevenueEl = document.getElementById("total-revenue");
-    if (!clientList || !totalRevenueEl) return;
+    if (lists.length === 0 || !totalRevenueEl) return;
 
     const term = (document.getElementById("client-search")?.value || "").trim().toLowerCase();
     const entries = Object.entries(clients).sort(([,a],[,b]) => {
@@ -161,9 +190,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const filtered = entries.filter(([, c]) => c.name.toLowerCase().includes(term));
 
-    clientList.innerHTML = "";
+    lists.forEach(l => l.innerHTML = "");
 
-    filtered.forEach(([key, client], index) => {
+    function buildCard(key, client, index) {
       const card = document.createElement("div");
       card.className = "client-card" + (cardCollapseState[key] ? " collapsed" : "");
 
@@ -228,6 +257,36 @@ incBtn.addEventListener("click", e => {
         countsDiv.appendChild(wrapper);
       });
 
+      // Mostrar fichas asignadas
+      Object.keys(chipTypes).forEach(type => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "client-card-count";
+        wrapper.innerHTML = `<span>${type}</span>`;
+
+        const count = (client.chips && client.chips[type]) || 0;
+        const val = document.createElement("span");
+        val.className = "count-value";
+        val.textContent = count;
+        wrapper.appendChild(val);
+
+        const controls = document.createElement("div");
+        controls.className = "count-controls";
+        controls.innerHTML = `
+          <button class="action-btn arrow-btn">&lt;</button>
+          <button class="action-btn arrow-btn">&gt;</button>`;
+        const [decBtn, incBtn] = controls.querySelectorAll("button");
+        decBtn.addEventListener("click", e => {
+          e.stopPropagation();
+          updateChipCount(key, type, -1);
+        });
+        incBtn.addEventListener("click", e => {
+          e.stopPropagation();
+          updateChipCount(key, type, 1);
+        });
+        wrapper.appendChild(controls);
+        countsDiv.appendChild(wrapper);
+      });
+
       card.appendChild(countsDiv);
 
       /* ---- TOTAL ---- */
@@ -243,12 +302,18 @@ incBtn.addEventListener("click", e => {
         <button class="action-btn delete-btn"><i class="material-icons">delete</i></button>
         <input type="checkbox" class="client-checkbox">`;
       actions.querySelector(".delete-btn").addEventListener("click", e => {
-  e.stopPropagation();                // evita colapso accidental
-  deleteClient(key);
-});
+        e.stopPropagation();
+        deleteClient(key);
+      });
       card.appendChild(actions);
+      return card;
+    }
 
-      clientList.appendChild(card);
+    lists.forEach(list => {
+      filtered.forEach(([key, client], index) => {
+        const card = buildCard(key, client, index);
+        list.appendChild(card);
+      });
     });
 
     totalRevenueEl.textContent = `Total Recaudado: $${calculateTotalRevenue(filtered.reduce((obj,[k,v])=>{obj[k]=v;return obj;},{})).toLocaleString()}`;
@@ -280,58 +345,70 @@ incBtn.addEventListener("click", e => {
     document.getElementById("stack-promedio").textContent  = `Stack Promedio: ${stackProm.toLocaleString()}`;
   }
 
+  function renderChipTypes() {
+    const list = document.getElementById("chip-types-list");
+    if (!list) return;
+    list.innerHTML = "";
+    Object.entries(chipTypes).forEach(([color, cfg]) => {
+      const div = document.createElement("div");
+      div.className = "chip-type-item";
+      div.textContent = `${color} – Cant: ${cfg.quantity || 0} – $${cfg.value || 0}`;
+      list.appendChild(div);
+    });
+  }
+
 
   // =====================
   //   PESTAÑAS
   // =====================
   const tabClients = document.getElementById("tab-clients");
   const tabMetrics = document.getElementById("tab-metrics");
+  const tabLibre  = document.getElementById("tab-libre");
   const tabPremios = document.getElementById("tab-premios");
-  const tabTimer = document.getElementById("tab-timer");
   const clientSection = document.getElementById("client-section");
   const metricsSection = document.getElementById("metrics-section");
+  const libreSection  = document.getElementById("libre-section");
   const premiosSection = document.getElementById("premios-section");
-  const timerSection = document.getElementById("timer-section");
 
   tabClients.addEventListener("click", () => {
     tabClients.classList.add("active");
     tabMetrics.classList.remove("active");
+    tabLibre.classList.remove("active");
     tabPremios.classList.remove("active");
-    tabTimer.classList.remove("active");
     clientSection.classList.remove("hidden");
     metricsSection.classList.add("hidden");
+    libreSection.classList.add("hidden");
     premiosSection.classList.add("hidden");
-    timerSection.classList.add("hidden");
   });
   tabMetrics.addEventListener("click", () => {
     tabMetrics.classList.add("active");
     tabClients.classList.remove("active");
+    tabLibre.classList.remove("active");
     tabPremios.classList.remove("active");
-    tabTimer.classList.remove("active");
     metricsSection.classList.remove("hidden");
     clientSection.classList.add("hidden");
+    libreSection.classList.add("hidden");
     premiosSection.classList.add("hidden");
-    timerSection.classList.add("hidden");
+  });
+  tabLibre.addEventListener("click", () => {
+    tabLibre.classList.add("active");
+    tabClients.classList.remove("active");
+    tabMetrics.classList.remove("active");
+    tabPremios.classList.remove("active");
+    libreSection.classList.remove("hidden");
+    clientSection.classList.add("hidden");
+    metricsSection.classList.add("hidden");
+    premiosSection.classList.add("hidden");
   });
   tabPremios.addEventListener("click", () => {
     tabPremios.classList.add("active");
     tabClients.classList.remove("active");
     tabMetrics.classList.remove("active");
-    tabTimer.classList.remove("active");
+    tabLibre.classList.remove("active");
     premiosSection.classList.remove("hidden");
     clientSection.classList.add("hidden");
     metricsSection.classList.add("hidden");
-    timerSection.classList.add("hidden");
-  });
-  tabTimer.addEventListener("click", () => {
-    tabTimer.classList.add("active");
-    tabClients.classList.remove("active");
-    tabMetrics.classList.remove("active");
-    tabPremios.classList.remove("active");
-    timerSection.classList.remove("hidden");
-    clientSection.classList.add("hidden");
-    metricsSection.classList.add("hidden");
-    premiosSection.classList.add("hidden");
+    libreSection.classList.add("hidden");
   });
 
   // =====================
@@ -397,262 +474,7 @@ incBtn.addEventListener("click", e => {
 
   document.getElementById("cantidad-premiados").addEventListener("change", updatePremios);
   document.getElementById("valor-total-premio").addEventListener("change", updatePremios);
-
-  // =====================
-  //   TEMPORIZADOR (SIN "DESCANSO")
-  // =====================
-  let timerInterval = null;
-  let timerRunning = false;
-  let timerRemaining = 0;
-  let timerEndTime = 0;
-  let currentLevelIndex = 0;
-  let levelsConfig = [];
-  let timerInitial = 0; // Duración total del nivel en segundos
-  const circleFg = document.querySelector(".circle-fg");
-  const circleLength = 283;
-  function updateCircle() {
-    if (!circleFg || timerInitial === 0) return;
-    const fraction = (timerInitial - timerRemaining) / timerInitial;
-    const offset = circleLength - (fraction * circleLength);
-    circleFg.style.strokeDashoffset = offset;
-  }
-  function updateTimerDisplay() {
-    timerRemaining = Math.max(0, Math.floor((timerEndTime - Date.now()) / 1000));
-    const minutes = Math.floor(timerRemaining / 60);
-    const seconds = timerRemaining % 60;
-    document.getElementById("timer-countdown").textContent =
-      `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    updateCircle();
-  }
-  function saveTimerStateToDB() {
-    const state = {
-      currentLevelIndex,
-      timerEndTime,
-      timerRunning,
-      timerInitial
-    };
-    database.ref("timerState").set(state);
-  }
-  // Se reemplaza la función de carga única por una suscripción en tiempo real
-  function subscribeTimerState() {
-    database.ref("timerState").on("value", snapshot => {
-      const state = snapshot.val();
-      if (state) {
-        currentLevelIndex = state.currentLevelIndex;
-        timerEndTime = state.timerEndTime;
-        timerRunning = state.timerRunning;
-        timerInitial = state.timerInitial || 0;
-        timerRemaining = Math.max(0, Math.floor((timerEndTime - Date.now()) / 1000));
-        if (levelsConfig.length > 0 && currentLevelIndex < levelsConfig.length) {
-          const levelInfo = levelsConfig[currentLevelIndex];
-          document.getElementById("current-level").textContent =
-            `Nivel: ${currentLevelIndex + 1} – Ciegas: ${levelInfo.blinds || "N/A"}`;
-        }
-        updateTimerDisplay();
-      }
-    });
-  }
-  function startTimer() {
-    if (!levelsConfig.length) {
-      alert("Por favor, guarda la configuración del temporizador primero.");
-      return;
-    }
-    if (!timerRunning) {
-      timerEndTime = Date.now() + timerRemaining * 1000;
-      timerRunning = true;
-      saveTimerStateToDB();
-      timerInterval = setInterval(() => {
-        updateTimerDisplay();
-        if (timerRemaining <= 0) {
-          playAlarm();
-          clearInterval(timerInterval);
-          timerRunning = false;
-          currentLevelIndex++;
-          if (currentLevelIndex >= levelsConfig.length) {
-            currentLevelIndex = levelsConfig.length - 1;
-            timerRemaining = 0;
-            updateTimerDisplay();
-            saveTimerStateToDB();
-            return;
-          }
-          timerRemaining = levelsConfig[currentLevelIndex].roundDuration;
-          timerInitial = timerRemaining;
-          timerEndTime = Date.now() + timerRemaining * 1000;
-          const levelInfo = levelsConfig[currentLevelIndex];
-          document.getElementById("current-level").textContent =
-            `Nivel: ${currentLevelIndex + 1} – Ciegas: ${levelInfo.blinds || "N/A"}`;
-          saveTimerStateToDB();
-          startTimer();
-        }
-      }, 1000);
-    }
-  }
-  function pauseTimer() {
-    clearInterval(timerInterval);
-    timerRunning = false;
-    saveTimerStateToDB();
-  }
-  function resetTimer() {
-    pauseTimer();
-    currentLevelIndex = 0;
-    if (levelsConfig.length) {
-      timerRemaining = levelsConfig[0].roundDuration;
-      timerInitial = timerRemaining;
-      document.getElementById("current-level").textContent =
-        `Nivel: 1 – Ciegas: ${levelsConfig[0].blinds || "N/A"}`;
-    } else {
-      timerRemaining = 0;
-      timerInitial = 0;
-      document.getElementById("current-level").textContent =
-        `Nivel: 1 – Ciegas: N/A`;
-    }
-    timerEndTime = Date.now() + timerRemaining * 1000;
-    updateTimerDisplay();
-    saveTimerStateToDB();
-  }
-  const restartLevelBtn = document.getElementById("restart-level-btn");
-  if (restartLevelBtn) {
-    restartLevelBtn.addEventListener("click", () => {
-      if (levelsConfig.length > 0 && currentLevelIndex < levelsConfig.length) {
-        timerRemaining = levelsConfig[currentLevelIndex].roundDuration;
-        timerInitial = timerRemaining;
-        timerEndTime = Date.now() + timerRemaining * 1000;
-        updateTimerDisplay();
-        saveTimerStateToDB();
-        if (timerRunning) {
-          clearInterval(timerInterval);
-          startTimer();
-        }
-      }
-    });
-  }
-  function loadTimerConfigFromDB() {
-    database.ref("timerConfig").once("value").then(snapshot => {
-      const config = snapshot.val();
-      if (config) {
-        levelsConfig = config;
-        const levelsContainer = document.getElementById("levels-container");
-        levelsContainer.innerHTML = "";
-        levelsConfig.forEach((level, index) => {
-          const row = document.createElement("tr");
-          row.className = "level";
-          row.innerHTML = `
-            <td>${index + 1}</td>
-            <td><input type="number" class="round-duration" value="${level.roundDuration / 60}"></td>
-            <td><input type="text" class="blinds" placeholder="Ej. 50/100" value="${level.blinds}"></td>
-            <td><button class="delete-level-btn btn">X</button></td>
-          `;
-          row.querySelector(".delete-level-btn").addEventListener("click", () => {
-            row.remove();
-          });
-          levelsContainer.appendChild(row);
-        });
-        if (levelsConfig.length > 0) {
-          timerRemaining = levelsConfig[0].roundDuration;
-          timerInitial = timerRemaining;
-          document.getElementById("current-level").textContent =
-            `Nivel: 1 – Ciegas: ${levelsConfig[0].blinds || "N/A"}`;
-        }
-        updateTimerDisplay();
-        // La suscripción en tiempo real se encargará de actualizar el estado del temporizador
-      }
-    });
-  }
-  loadTimerConfigFromDB();
-  subscribeTimerState();
-
-  // Intervalo global para actualizar la cuenta regresiva cada segundo (útil para usuarios que solo consultan)
-  setInterval(() => {
-    updateTimerDisplay();
-  }, 1000);
-
-  const startTimerBtn = document.getElementById("start-timer-btn");
-  const pauseTimerBtn = document.getElementById("pause-timer-btn");
-  const resetTimerBtn = document.getElementById("reset-timer-btn");
-  if (startTimerBtn) startTimerBtn.addEventListener("click", startTimer);
-  if (pauseTimerBtn) pauseTimerBtn.addEventListener("click", pauseTimer);
-  if (resetTimerBtn) resetTimerBtn.addEventListener("click", resetTimer);
-  // =====================
-  //   CONFIGURACIÓN DE NIVELES
-  // =====================
-  const addLevelBtn = document.getElementById("add-level-btn");
-  if (addLevelBtn) {
-    addLevelBtn.addEventListener("click", () => {
-      const levelsContainer = document.getElementById("levels-container");
-      const rowCount = levelsContainer.querySelectorAll(".level").length + 1;
-      const row = document.createElement("tr");
-      row.className = "level";
-      row.innerHTML = `
-        <td>${rowCount}</td>
-        <td><input type="number" class="round-duration" value="10"></td>
-        <td><input type="text" class="blinds" placeholder="Ej. 50/100"></td>
-        <td><button class="delete-level-btn btn">X</button></td>
-      `;
-      row.querySelector(".delete-level-btn").addEventListener("click", () => {
-        row.remove();
-      });
-      levelsContainer.appendChild(row);
-    });
-  }
-  const saveTimerConfigBtn = document.getElementById("save-timer-config-btn");
-  if (saveTimerConfigBtn) {
-    saveTimerConfigBtn.addEventListener("click", () => {
-      const levelsContainer = document.getElementById("levels-container");
-      const levelRows = levelsContainer.querySelectorAll(".level");
-      levelsConfig = [];
-      levelRows.forEach((row) => {
-        const roundInput = row.querySelector(".round-duration");
-        const blindsInput = row.querySelector(".blinds");
-        const roundDuration = (parseInt(roundInput.value) || 0) * 60;
-        const blinds = blindsInput.value || "";
-        levelsConfig.push({ roundDuration, blinds });
-      });
-      currentLevelIndex = 0;
-      if (levelsConfig.length > 0) {
-        timerRemaining = levelsConfig[0].roundDuration;
-        timerInitial = timerRemaining;
-        document.getElementById("current-level").textContent =
-          `Nivel: 1 – Ciegas: ${levelsConfig[0].blinds || "N/A"}`;
-      } else {
-        timerRemaining = 0;
-        timerInitial = 0;
-        document.getElementById("current-level").textContent =
-          `Nivel: 1 – Ciegas: N/A`;
-      }
-      timerEndTime = Date.now() + timerRemaining * 1000;
-      updateTimerDisplay();
-      database.ref("timerConfig").set(levelsConfig)
-        .then(() => {
-          alert("Configuración del temporizador guardada.");
-          saveTimerStateToDB();
-          document.getElementById("timer-config").classList.add("hidden");
-        })
-        .catch(error => {
-          console.error("Error al guardar la configuración:", error);
-          alert("Error al guardar la configuración.");
-        });
-    });
-  }
-  const toggleTimerConfigBtn = document.getElementById("toggle-timer-config-btn");
-  const timerConfig = document.getElementById("timer-config");
-  if (toggleTimerConfigBtn) {
-    toggleTimerConfigBtn.addEventListener("click", () => {
-      timerConfig.classList.toggle("hidden");
-    });
-  }
   updatePricesUI();
+  renderChipTypes();
 });
 
-const fullscreenToggleBtn = document.getElementById("toggle-fullscreen-btn");
-const fullscreenIcon = document.getElementById("fullscreen-icon");
-if (fullscreenToggleBtn) {
-  fullscreenToggleBtn.addEventListener("click", () => {
-    const timerSection = document.querySelector(".timer-section");
-    timerSection.classList.toggle("fullscreen");
-    if (timerSection.classList.contains("fullscreen")) {
-      fullscreenIcon.textContent = "fullscreen_exit";
-    } else {
-      fullscreenIcon.textContent = "fullscreen";
-    }
-  });
-}
