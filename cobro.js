@@ -14,11 +14,16 @@ document.addEventListener("DOMContentLoaded", () => {
   const auth = firebase.auth();
   const database = firebase.database();
 
-  // Estado colapsado de las tarjetas
-  let cardCollapseState = {};
+
+  // Último cliente modificado
+  let lastModifiedKey = null;
 
   // NUEVA variable global con todos los clientes para filtrar
   let currentClients = {};
+  let currentLibreClients = {};
+
+  // Tipos de fichas configurados
+  let chipTypes = {};
 
   // Forzar cierre de sesión para desarrollo
   auth.signOut();
@@ -82,14 +87,36 @@ document.addEventListener("DOMContentLoaded", () => {
     prices.Recompra  = parseFloat(document.getElementById("recompra-price").value)  || 0;
     prices.Adicion   = parseFloat(document.getElementById("adicion-price").value)   || 0;
     renderClients(currentClients);
+    renderLibreClients(currentClients);
     renderMetrics(currentClients);
     alert("Precios actualizados");
+  });
+
+  // Agregar tipo de ficha
+  document.getElementById("add-chip-type-btn")?.addEventListener("click", () => {
+    const color = document.getElementById("chip-color").value.trim();
+    const quantity = parseInt(document.getElementById("chip-qty").value) || 0;
+    const value = parseFloat(document.getElementById("chip-value").value) || 0;
+    if (!color) return alert("Ingresa color de ficha");
+    chipTypesRef.child(color).set({ quantity, available: quantity, value });
+    document.getElementById("chip-color").value = "";
+    document.getElementById("chip-qty").value = "";
+    document.getElementById("chip-value").value = "";
   });
 
   /* =====================
        CLIENTES
   ===================== */
   const clientsRef = database.ref("clients");
+  const libreClientsRef = database.ref("libreClients");
+  const chipTypesRef = database.ref("chipTypes");
+
+  chipTypesRef.on("value", snapshot => {
+    chipTypes = snapshot.val() || {};
+    renderChipTypes();
+    renderClients(currentClients);
+    renderLibreClients(currentLibreClients);
+  });
 
   clientsRef.on("value", snapshot => {
     currentClients = snapshot.val() || {};
@@ -97,12 +124,31 @@ document.addEventListener("DOMContentLoaded", () => {
     renderMetrics(currentClients);
   });
 
+  libreClientsRef.on("value", snapshot => {
+    currentLibreClients = snapshot.val() || {};
+    renderLibreClients(currentLibreClients);
+  });
+
   function addClient(name) {
-    clientsRef.push({
+    const ref = clientsRef.push({
       name,
       beerCounts: { Entrada: 0, Recompra: 0, Adicion: 0 },
+      chips: {},
+      selected: false,
+      note: "",
       createdAt: firebase.database.ServerValue.TIMESTAMP
     });
+    lastModifiedKey = ref.key;
+  }
+
+  function addLibreClient(name) {
+    const ref = libreClientsRef.push({
+      name,
+      chips: {},
+      selected: false,
+      createdAt: firebase.database.ServerValue.TIMESTAMP
+    });
+    lastModifiedKey = ref.key;
   }
 
   // Evitar duplicados
@@ -116,18 +162,116 @@ document.addEventListener("DOMContentLoaded", () => {
     input.value = "";
   });
 
+  document.getElementById("add-libre-client-btn")?.addEventListener("click", () => {
+    const input = document.getElementById("libre-client-name");
+    const name  = input.value.trim();
+    if (!name) return alert("Por favor ingresa un nombre de cliente.");
+    const exists = Object.values(currentLibreClients).some(c => c.name.toLowerCase() === name.toLowerCase());
+    if (exists) return alert("Ya existe un cliente con ese nombre.");
+    addLibreClient(name);
+    input.value = "";
+  });
+
   function updateBeerCount(clientKey, beerType, increment) {
     const ref = database.ref(`clients/${clientKey}/beerCounts/${beerType}`);
     ref.transaction(count => Math.max(0, (count || 0) + increment));
+    lastModifiedKey = clientKey;
   }
 
   function toggleBeerCount(clientKey, beerType) {
     const ref = database.ref(`clients/${clientKey}/beerCounts/${beerType}`);
     ref.transaction(val => (val === 1 ? 0 : 1));
+    lastModifiedKey = clientKey;
+  }
+
+  function updateChipCount(clientKey, chipType, increment) {
+    const clientRef = database.ref(`clients/${clientKey}/chips/${chipType}`);
+    const availRef = database.ref(`chipTypes/${chipType}/available`);
+
+    if (increment > 0) {
+      availRef.transaction(avail => {
+        if (avail === null) return 0;
+        if (avail <= 0) return; // abort
+        return avail - 1;
+      }, (err, committed) => {
+        if (committed) {
+          clientRef.transaction(c => (c || 0) + 1);
+          lastModifiedKey = clientKey;
+        }
+      });
+    } else if (increment < 0) {
+      clientRef.transaction(c => {
+        const val = Math.max(0, (c || 0) - 1);
+        if (val < (c || 0)) {
+          availRef.transaction(a => (a || 0) + 1);
+        }
+        if (val < (c || 0)) lastModifiedKey = clientKey;
+        return val;
+      });
+    }
+  }
+
+  function updateLibreChipCount(clientKey, chipType, increment) {
+    const clientRef = database.ref(`libreClients/${clientKey}/chips/${chipType}`);
+    const availRef = database.ref(`chipTypes/${chipType}/available`);
+
+    if (increment > 0) {
+      availRef.transaction(avail => {
+        if (avail === null) return 0;
+        if (avail <= 0) return; // abort
+        return avail - 1;
+      }, (err, committed) => {
+        if (committed) {
+          clientRef.transaction(c => (c || 0) + 1);
+          lastModifiedKey = clientKey;
+        }
+      });
+    } else if (increment < 0) {
+      clientRef.transaction(c => {
+        const val = Math.max(0, (c || 0) - 1);
+        if (val < (c || 0)) {
+          availRef.transaction(a => (a || 0) + 1);
+        }
+        if (val < (c || 0)) lastModifiedKey = clientKey;
+        return val;
+      });
+    }
+  }
+
+  function deleteLibreClient(clientKey) {
+    database.ref(`libreClients/${clientKey}`).remove();
   }
 
   function deleteClient(clientKey) {
     database.ref(`clients/${clientKey}`).remove();
+  }
+
+  function updateClientNote(clientKey, note) {
+    database.ref(`clients/${clientKey}/note`).set(note);
+    lastModifiedKey = clientKey;
+  }
+
+  function updateClientSelected(clientKey, selected) {
+    database.ref(`clients/${clientKey}/selected`).set(!!selected);
+    lastModifiedKey = clientKey;
+  }
+
+  function updateChipType(color, quantity, value) {
+    const cfg = chipTypes[color] || {};
+    const used = (cfg.quantity || 0) - (cfg.available || 0);
+    let available = quantity - used;
+    if (available < 0) available = 0;
+    chipTypesRef.child(color).update({ quantity, value, available });
+  }
+
+  function deleteChipType(color) {
+    chipTypesRef.child(color).remove();
+    clientsRef.once("value").then(s => {
+      s.forEach(c => database.ref(`clients/${c.key}/chips/${color}`).remove());
+    });
+    libreClientsRef.once("value").then(s => {
+      s.forEach(c => database.ref(`libreClients/${c.key}/chips/${color}`).remove());
+    });
   }
 
   function calculateTotalRevenue(clients) {
@@ -139,18 +283,194 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 0);
   }
 
+  function buildClientCard(key, client, index, options) {
+    let showChips = false;
+    let showBeer = true;
+    let showNotes = false;
+    let showCheckbox = true;
+    let chipUpdater = updateChipCount;
+    let beerUpdater = updateBeerCount;
+    let noteUpdater = updateClientNote;
+    let deleteFn = deleteClient;
+
+    if (typeof options === 'boolean') {
+      showChips = options;
+    } else if (typeof options === 'object' && options !== null) {
+      showChips = !!options.showChips;
+      showBeer = options.showBeer !== false;
+      showNotes = !!options.showNotes;
+      if (options.showCheckbox === false) showCheckbox = false;
+      if (options.updateChip) chipUpdater = options.updateChip;
+      if (options.updateBeer) beerUpdater = options.updateBeer;
+      if (options.updateNote) noteUpdater = options.updateNote;
+      if (options.deleteFn) deleteFn = options.deleteFn;
+    }
+    const card = document.createElement("div");
+    card.className = "client-card collapsed";
+    if (key === lastModifiedKey) card.classList.add("last-modified");
+
+    const header = document.createElement("div");
+    header.className = "client-card-header";
+    header.innerHTML = `<h3>${index + 1}. ${client.name}</h3>`;
+    header.style.cursor = "pointer";
+    header.addEventListener("click", e => {
+      if (!["BUTTON", "I"].includes(e.target.tagName)) {
+        card.classList.toggle("collapsed");
+      }
+    });
+    card.appendChild(header);
+
+    const countsDiv = document.createElement("div");
+    countsDiv.className = "client-card-counts";
+
+    const beerTypes = ["Entrada", "Recompra", "Adicion"];
+    let clientTotal = 0;
+
+    if (showBeer) beerTypes.forEach(type => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "client-card-count";
+      wrapper.innerHTML = `<span>${type}</span>`;
+
+      const count = (client.beerCounts && client.beerCounts[type]) || 0;
+
+      if (type === "Entrada" || type === "Adicion") {
+        const btn = document.createElement("button");
+        btn.className = "toggle-btn";
+        btn.innerHTML = `<i class="material-icons">${count === 1 ? "toggle_on" : "toggle_off"}</i>`;
+        btn.firstChild.style.color = count === 1 ? "green" : "gray";
+        btn.onclick = () => toggleBeerCount(key, type);
+        wrapper.appendChild(btn);
+      } else {
+        const val = document.createElement("span");
+        val.className = "count-value";
+        val.textContent = count;
+        wrapper.appendChild(val);
+
+        const controls = document.createElement("div");
+        controls.className = "count-controls";
+        controls.innerHTML = `
+          <button class="action-btn arrow-btn">&lt;</button>
+          <button class="action-btn arrow-btn">&gt;</button>`;
+        const [decBtn, incBtn] = controls.querySelectorAll("button");
+        decBtn.addEventListener("click", e => {
+          e.stopPropagation();
+          beerUpdater(key, type, -1);
+        });
+        incBtn.addEventListener("click", e => {
+          e.stopPropagation();
+          beerUpdater(key, type, 1);
+        });
+        wrapper.appendChild(controls);
+      }
+
+      clientTotal += count * prices[type];
+      countsDiv.appendChild(wrapper);
+    });
+
+    if (showChips) {
+      Object.keys(chipTypes).forEach(type => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "client-card-count";
+        wrapper.innerHTML = `<span>${type}</span>`;
+
+        const count = (client.chips && client.chips[type]) || 0;
+        const val = document.createElement("span");
+        val.className = "count-value";
+        val.textContent = count;
+        wrapper.appendChild(val);
+
+        const controls = document.createElement("div");
+        controls.className = "count-controls";
+        controls.innerHTML = `
+          <button class="action-btn arrow-btn">&lt;</button>
+          <button class="action-btn arrow-btn">&gt;</button>`;
+        const [decBtn, incBtn] = controls.querySelectorAll("button");
+        decBtn.addEventListener("click", e => {
+          e.stopPropagation();
+          chipUpdater(key, type, -1);
+        });
+        incBtn.addEventListener("click", e => {
+          e.stopPropagation();
+          chipUpdater(key, type, 1);
+        });
+        clientTotal += count * ((chipTypes[type] && chipTypes[type].value) || 0);
+        wrapper.appendChild(controls);
+        countsDiv.appendChild(wrapper);
+      });
+    }
+
+    card.appendChild(countsDiv);
+
+    const totalDiv = document.createElement("div");
+    totalDiv.className = "client-card-total";
+    totalDiv.textContent = `Total: $${clientTotal.toLocaleString()}`;
+    card.appendChild(totalDiv);
+
+    const actions = document.createElement("div");
+    actions.className = "client-card-actions";
+    actions.innerHTML = `${showCheckbox ? '<input type="checkbox" class="client-checkbox">' : ''}`;
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "action-btn delete-btn";
+    deleteBtn.innerHTML = '<i class="material-icons">close</i>';
+    deleteBtn.addEventListener("click", e => {
+      e.stopPropagation();
+      deleteFn(key);
+    });
+    card.appendChild(deleteBtn);
+
+    if (showCheckbox) {
+      const cb = actions.querySelector(".client-checkbox");
+      cb.checked = !!client.selected;
+      cb.addEventListener("change", e => updateClientSelected(key, e.target.checked));
+    }
+
+    if (showNotes) {
+      const noteBtn = document.createElement("button");
+      noteBtn.className = "action-btn note-btn";
+      noteBtn.textContent = "Notas";
+      actions.prepend(noteBtn);
+
+      if (client.note && client.note.trim() !== "") {
+        noteBtn.classList.add("has-note");
+      }
+
+      const noteArea = document.createElement("textarea");
+      noteArea.className = "client-note hidden";
+      noteArea.value = client.note || "";
+      noteArea.addEventListener("click", e => e.stopPropagation());
+      noteArea.addEventListener("change", e => {
+        noteUpdater(key, e.target.value);
+        if (e.target.value.trim()) noteBtn.classList.add("has-note");
+        else noteBtn.classList.remove("has-note");
+      });
+      noteBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        noteArea.classList.toggle("hidden");
+      });
+      card.appendChild(noteArea);
+    }
+    card.appendChild(actions);
+    return card;
+  }
+
   /* ===== BÚSQUEDA ===== */
   document.getElementById("client-search")?.addEventListener("input", () => {
     renderClients(currentClients);
+    renderLibreClients(currentLibreClients);
+  });
+
+  document.getElementById("libre-client-search")?.addEventListener("input", () => {
+    renderLibreClients(currentLibreClients);
   });
 
   /* =====================
        RENDERIZACIÓN
   ===================== */
   function renderClients(clients) {
-    const clientList     = document.getElementById("client-list");
+    const list = document.getElementById("client-list");
     const totalRevenueEl = document.getElementById("total-revenue");
-    if (!clientList || !totalRevenueEl) return;
+    if (!list || !totalRevenueEl) return;
 
     const term = (document.getElementById("client-search")?.value || "").trim().toLowerCase();
     const entries = Object.entries(clients).sort(([,a],[,b]) => {
@@ -161,97 +481,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const filtered = entries.filter(([, c]) => c.name.toLowerCase().includes(term));
 
-    clientList.innerHTML = "";
+    list.innerHTML = "";
+
 
     filtered.forEach(([key, client], index) => {
-      const card = document.createElement("div");
-      card.className = "client-card" + (cardCollapseState[key] ? " collapsed" : "");
-
-      /* ---- HEADER ---- */
-      const header = document.createElement("div");
-      header.className = "client-card-header";
-      header.innerHTML = `<h3>${index + 1}. ${client.name}</h3>`;
-      header.style.cursor = "pointer";
-      header.addEventListener("click", e => {
-        if (!["BUTTON", "I"].includes(e.target.tagName)) {
-          const collapsed = card.classList.toggle("collapsed");
-          cardCollapseState[key] = collapsed;
-        }
-      });
-      card.appendChild(header);
-
-      /* ---- COUNTS ---- */
-      const countsDiv = document.createElement("div");
-      countsDiv.className = "client-card-counts";
-
-      const beerTypes = ["Entrada", "Recompra", "Adicion"];
-      let clientTotal = 0;
-
-      beerTypes.forEach(type => {
-        const wrapper = document.createElement("div");
-        wrapper.className = "client-card-count";
-        wrapper.innerHTML = `<span>${type}</span>`;
-
-        const count = (client.beerCounts && client.beerCounts[type]) || 0;
-
-        if (type === "Entrada" || type === "Adicion") {
-          const btn = document.createElement("button");
-          btn.className = "toggle-btn";
-          btn.innerHTML = `<i class="material-icons">${count === 1 ? "toggle_on" : "toggle_off"}</i>`;
-          btn.firstChild.style.color = count === 1 ? "green" : "gray";
-          btn.onclick = () => toggleBeerCount(key, type);
-          wrapper.appendChild(btn);
-        } else {
-          const val = document.createElement("span");
-          val.className = "count-value";
-          val.textContent = count;
-          wrapper.appendChild(val);
-
-          const controls = document.createElement("div");
-          controls.className = "count-controls";
-          controls.innerHTML = `
-            <button class="action-btn arrow-btn">&lt;</button>
-            <button class="action-btn arrow-btn">&gt;</button>`;
-          const [decBtn, incBtn] = controls.querySelectorAll("button");
-        decBtn.addEventListener("click", e => {
-        e.stopPropagation();                // evita colapsar la tarjeta
-          updateBeerCount(key, type, -1);
-        });
-incBtn.addEventListener("click", e => {
-  e.stopPropagation();
-  updateBeerCount(key, type, 1);
-});
-          wrapper.appendChild(controls);
-        }
-
-        clientTotal += count * prices[type];
-        countsDiv.appendChild(wrapper);
-      });
-
-      card.appendChild(countsDiv);
-
-      /* ---- TOTAL ---- */
-      const totalDiv = document.createElement("div");
-      totalDiv.className = "client-card-total";
-      totalDiv.textContent = `Total: $${clientTotal.toLocaleString()}`;
-      card.appendChild(totalDiv);
-
-      /* ---- ACTIONS ---- */
-      const actions = document.createElement("div");
-      actions.className = "client-card-actions";
-      actions.innerHTML = `
-        <button class="action-btn delete-btn"><i class="material-icons">delete</i></button>
-        <input type="checkbox" class="client-checkbox">`;
-      actions.querySelector(".delete-btn").addEventListener("click", e => {
-  e.stopPropagation();                // evita colapso accidental
-  deleteClient(key);
-});
-      card.appendChild(actions);
-
-      clientList.appendChild(card);
+      const card = buildClientCard(key, client, index, { showNotes: true });
+      list.appendChild(card);
     });
 
     totalRevenueEl.textContent = `Total Recaudado: $${calculateTotalRevenue(filtered.reduce((obj,[k,v])=>{obj[k]=v;return obj;},{})).toLocaleString()}`;
+  }
+
+  function renderLibreClients(clients) {
+    const list = document.getElementById("libre-client-list");
+    if (!list) return;
+    const term = (document.getElementById("libre-client-search")?.value || "").trim().toLowerCase();
+    const entries = Object.entries(clients).sort(([,a],[,b]) => {
+      const t1 = (typeof a.createdAt === 'number') ? a.createdAt : Number.MAX_SAFE_INTEGER;
+      const t2 = (typeof b.createdAt === 'number') ? b.createdAt : Number.MAX_SAFE_INTEGER;
+      return t1 - t2;
+    });
+
+    const filtered = entries.filter(([, c]) => c.name.toLowerCase().includes(term));
+    list.innerHTML = "";
+
+    filtered.forEach(([key, client], index) => {
+      const card = buildClientCard(key, client, index, {
+        showChips:true,
+        showBeer:false,
+        updateChip:updateLibreChipCount,
+        deleteFn: deleteLibreClient
+      });
+      list.appendChild(card);
+    });
   }
 
   function renderMetrics(clients) {
@@ -280,58 +542,86 @@ incBtn.addEventListener("click", e => {
     document.getElementById("stack-promedio").textContent  = `Stack Promedio: ${stackProm.toLocaleString()}`;
   }
 
+  function renderChipTypes() {
+    const list = document.getElementById("chip-types-list");
+    if (!list) return;
+    list.innerHTML = "";
+    Object.entries(chipTypes).forEach(([color, cfg]) => {
+      const div = document.createElement("div");
+      div.className = "chip-type-item";
+      div.innerHTML = `
+        <span class="chip-color">${color}</span>
+        <input type="number" class="chip-edit-qty" value="${cfg.quantity || 0}">
+        <span class="chip-available">/${cfg.available ?? cfg.quantity ?? 0}</span>
+        <input type="number" class="chip-edit-val" value="${cfg.value || 0}">
+        <button class="chip-save-btn">Guardar</button>
+        <button class="chip-del-btn">X</button>`;
+      const qtyInput = div.querySelector(".chip-edit-qty");
+      const valInput = div.querySelector(".chip-edit-val");
+      div.querySelector(".chip-save-btn").addEventListener("click", () => {
+        const q = parseInt(qtyInput.value) || 0;
+        const v = parseFloat(valInput.value) || 0;
+        updateChipType(color, q, v);
+      });
+      div.querySelector(".chip-del-btn").addEventListener("click", () => {
+        if (confirm(`Eliminar tipo ${color}?`)) deleteChipType(color);
+      });
+      list.appendChild(div);
+    });
+  }
+
 
   // =====================
   //   PESTAÑAS
   // =====================
   const tabClients = document.getElementById("tab-clients");
   const tabMetrics = document.getElementById("tab-metrics");
+  const tabLibre  = document.getElementById("tab-libre");
   const tabPremios = document.getElementById("tab-premios");
-  const tabTimer = document.getElementById("tab-timer");
   const clientSection = document.getElementById("client-section");
   const metricsSection = document.getElementById("metrics-section");
+  const libreSection  = document.getElementById("libre-section");
   const premiosSection = document.getElementById("premios-section");
-  const timerSection = document.getElementById("timer-section");
 
   tabClients.addEventListener("click", () => {
     tabClients.classList.add("active");
     tabMetrics.classList.remove("active");
+    tabLibre.classList.remove("active");
     tabPremios.classList.remove("active");
-    tabTimer.classList.remove("active");
     clientSection.classList.remove("hidden");
     metricsSection.classList.add("hidden");
+    libreSection.classList.add("hidden");
     premiosSection.classList.add("hidden");
-    timerSection.classList.add("hidden");
   });
   tabMetrics.addEventListener("click", () => {
     tabMetrics.classList.add("active");
     tabClients.classList.remove("active");
+    tabLibre.classList.remove("active");
     tabPremios.classList.remove("active");
-    tabTimer.classList.remove("active");
     metricsSection.classList.remove("hidden");
     clientSection.classList.add("hidden");
+    libreSection.classList.add("hidden");
     premiosSection.classList.add("hidden");
-    timerSection.classList.add("hidden");
+  });
+  tabLibre.addEventListener("click", () => {
+    tabLibre.classList.add("active");
+    tabClients.classList.remove("active");
+    tabMetrics.classList.remove("active");
+    tabPremios.classList.remove("active");
+    libreSection.classList.remove("hidden");
+    clientSection.classList.add("hidden");
+    metricsSection.classList.add("hidden");
+    premiosSection.classList.add("hidden");
   });
   tabPremios.addEventListener("click", () => {
     tabPremios.classList.add("active");
     tabClients.classList.remove("active");
     tabMetrics.classList.remove("active");
-    tabTimer.classList.remove("active");
+    tabLibre.classList.remove("active");
     premiosSection.classList.remove("hidden");
     clientSection.classList.add("hidden");
     metricsSection.classList.add("hidden");
-    timerSection.classList.add("hidden");
-  });
-  tabTimer.addEventListener("click", () => {
-    tabTimer.classList.add("active");
-    tabClients.classList.remove("active");
-    tabMetrics.classList.remove("active");
-    tabPremios.classList.remove("active");
-    timerSection.classList.remove("hidden");
-    clientSection.classList.add("hidden");
-    metricsSection.classList.add("hidden");
-    premiosSection.classList.add("hidden");
+    libreSection.classList.add("hidden");
   });
 
   // =====================
@@ -397,262 +687,7 @@ incBtn.addEventListener("click", e => {
 
   document.getElementById("cantidad-premiados").addEventListener("change", updatePremios);
   document.getElementById("valor-total-premio").addEventListener("change", updatePremios);
-
-  // =====================
-  //   TEMPORIZADOR (SIN "DESCANSO")
-  // =====================
-  let timerInterval = null;
-  let timerRunning = false;
-  let timerRemaining = 0;
-  let timerEndTime = 0;
-  let currentLevelIndex = 0;
-  let levelsConfig = [];
-  let timerInitial = 0; // Duración total del nivel en segundos
-  const circleFg = document.querySelector(".circle-fg");
-  const circleLength = 283;
-  function updateCircle() {
-    if (!circleFg || timerInitial === 0) return;
-    const fraction = (timerInitial - timerRemaining) / timerInitial;
-    const offset = circleLength - (fraction * circleLength);
-    circleFg.style.strokeDashoffset = offset;
-  }
-  function updateTimerDisplay() {
-    timerRemaining = Math.max(0, Math.floor((timerEndTime - Date.now()) / 1000));
-    const minutes = Math.floor(timerRemaining / 60);
-    const seconds = timerRemaining % 60;
-    document.getElementById("timer-countdown").textContent =
-      `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    updateCircle();
-  }
-  function saveTimerStateToDB() {
-    const state = {
-      currentLevelIndex,
-      timerEndTime,
-      timerRunning,
-      timerInitial
-    };
-    database.ref("timerState").set(state);
-  }
-  // Se reemplaza la función de carga única por una suscripción en tiempo real
-  function subscribeTimerState() {
-    database.ref("timerState").on("value", snapshot => {
-      const state = snapshot.val();
-      if (state) {
-        currentLevelIndex = state.currentLevelIndex;
-        timerEndTime = state.timerEndTime;
-        timerRunning = state.timerRunning;
-        timerInitial = state.timerInitial || 0;
-        timerRemaining = Math.max(0, Math.floor((timerEndTime - Date.now()) / 1000));
-        if (levelsConfig.length > 0 && currentLevelIndex < levelsConfig.length) {
-          const levelInfo = levelsConfig[currentLevelIndex];
-          document.getElementById("current-level").textContent =
-            `Nivel: ${currentLevelIndex + 1} – Ciegas: ${levelInfo.blinds || "N/A"}`;
-        }
-        updateTimerDisplay();
-      }
-    });
-  }
-  function startTimer() {
-    if (!levelsConfig.length) {
-      alert("Por favor, guarda la configuración del temporizador primero.");
-      return;
-    }
-    if (!timerRunning) {
-      timerEndTime = Date.now() + timerRemaining * 1000;
-      timerRunning = true;
-      saveTimerStateToDB();
-      timerInterval = setInterval(() => {
-        updateTimerDisplay();
-        if (timerRemaining <= 0) {
-          playAlarm();
-          clearInterval(timerInterval);
-          timerRunning = false;
-          currentLevelIndex++;
-          if (currentLevelIndex >= levelsConfig.length) {
-            currentLevelIndex = levelsConfig.length - 1;
-            timerRemaining = 0;
-            updateTimerDisplay();
-            saveTimerStateToDB();
-            return;
-          }
-          timerRemaining = levelsConfig[currentLevelIndex].roundDuration;
-          timerInitial = timerRemaining;
-          timerEndTime = Date.now() + timerRemaining * 1000;
-          const levelInfo = levelsConfig[currentLevelIndex];
-          document.getElementById("current-level").textContent =
-            `Nivel: ${currentLevelIndex + 1} – Ciegas: ${levelInfo.blinds || "N/A"}`;
-          saveTimerStateToDB();
-          startTimer();
-        }
-      }, 1000);
-    }
-  }
-  function pauseTimer() {
-    clearInterval(timerInterval);
-    timerRunning = false;
-    saveTimerStateToDB();
-  }
-  function resetTimer() {
-    pauseTimer();
-    currentLevelIndex = 0;
-    if (levelsConfig.length) {
-      timerRemaining = levelsConfig[0].roundDuration;
-      timerInitial = timerRemaining;
-      document.getElementById("current-level").textContent =
-        `Nivel: 1 – Ciegas: ${levelsConfig[0].blinds || "N/A"}`;
-    } else {
-      timerRemaining = 0;
-      timerInitial = 0;
-      document.getElementById("current-level").textContent =
-        `Nivel: 1 – Ciegas: N/A`;
-    }
-    timerEndTime = Date.now() + timerRemaining * 1000;
-    updateTimerDisplay();
-    saveTimerStateToDB();
-  }
-  const restartLevelBtn = document.getElementById("restart-level-btn");
-  if (restartLevelBtn) {
-    restartLevelBtn.addEventListener("click", () => {
-      if (levelsConfig.length > 0 && currentLevelIndex < levelsConfig.length) {
-        timerRemaining = levelsConfig[currentLevelIndex].roundDuration;
-        timerInitial = timerRemaining;
-        timerEndTime = Date.now() + timerRemaining * 1000;
-        updateTimerDisplay();
-        saveTimerStateToDB();
-        if (timerRunning) {
-          clearInterval(timerInterval);
-          startTimer();
-        }
-      }
-    });
-  }
-  function loadTimerConfigFromDB() {
-    database.ref("timerConfig").once("value").then(snapshot => {
-      const config = snapshot.val();
-      if (config) {
-        levelsConfig = config;
-        const levelsContainer = document.getElementById("levels-container");
-        levelsContainer.innerHTML = "";
-        levelsConfig.forEach((level, index) => {
-          const row = document.createElement("tr");
-          row.className = "level";
-          row.innerHTML = `
-            <td>${index + 1}</td>
-            <td><input type="number" class="round-duration" value="${level.roundDuration / 60}"></td>
-            <td><input type="text" class="blinds" placeholder="Ej. 50/100" value="${level.blinds}"></td>
-            <td><button class="delete-level-btn btn">X</button></td>
-          `;
-          row.querySelector(".delete-level-btn").addEventListener("click", () => {
-            row.remove();
-          });
-          levelsContainer.appendChild(row);
-        });
-        if (levelsConfig.length > 0) {
-          timerRemaining = levelsConfig[0].roundDuration;
-          timerInitial = timerRemaining;
-          document.getElementById("current-level").textContent =
-            `Nivel: 1 – Ciegas: ${levelsConfig[0].blinds || "N/A"}`;
-        }
-        updateTimerDisplay();
-        // La suscripción en tiempo real se encargará de actualizar el estado del temporizador
-      }
-    });
-  }
-  loadTimerConfigFromDB();
-  subscribeTimerState();
-
-  // Intervalo global para actualizar la cuenta regresiva cada segundo (útil para usuarios que solo consultan)
-  setInterval(() => {
-    updateTimerDisplay();
-  }, 1000);
-
-  const startTimerBtn = document.getElementById("start-timer-btn");
-  const pauseTimerBtn = document.getElementById("pause-timer-btn");
-  const resetTimerBtn = document.getElementById("reset-timer-btn");
-  if (startTimerBtn) startTimerBtn.addEventListener("click", startTimer);
-  if (pauseTimerBtn) pauseTimerBtn.addEventListener("click", pauseTimer);
-  if (resetTimerBtn) resetTimerBtn.addEventListener("click", resetTimer);
-  // =====================
-  //   CONFIGURACIÓN DE NIVELES
-  // =====================
-  const addLevelBtn = document.getElementById("add-level-btn");
-  if (addLevelBtn) {
-    addLevelBtn.addEventListener("click", () => {
-      const levelsContainer = document.getElementById("levels-container");
-      const rowCount = levelsContainer.querySelectorAll(".level").length + 1;
-      const row = document.createElement("tr");
-      row.className = "level";
-      row.innerHTML = `
-        <td>${rowCount}</td>
-        <td><input type="number" class="round-duration" value="10"></td>
-        <td><input type="text" class="blinds" placeholder="Ej. 50/100"></td>
-        <td><button class="delete-level-btn btn">X</button></td>
-      `;
-      row.querySelector(".delete-level-btn").addEventListener("click", () => {
-        row.remove();
-      });
-      levelsContainer.appendChild(row);
-    });
-  }
-  const saveTimerConfigBtn = document.getElementById("save-timer-config-btn");
-  if (saveTimerConfigBtn) {
-    saveTimerConfigBtn.addEventListener("click", () => {
-      const levelsContainer = document.getElementById("levels-container");
-      const levelRows = levelsContainer.querySelectorAll(".level");
-      levelsConfig = [];
-      levelRows.forEach((row) => {
-        const roundInput = row.querySelector(".round-duration");
-        const blindsInput = row.querySelector(".blinds");
-        const roundDuration = (parseInt(roundInput.value) || 0) * 60;
-        const blinds = blindsInput.value || "";
-        levelsConfig.push({ roundDuration, blinds });
-      });
-      currentLevelIndex = 0;
-      if (levelsConfig.length > 0) {
-        timerRemaining = levelsConfig[0].roundDuration;
-        timerInitial = timerRemaining;
-        document.getElementById("current-level").textContent =
-          `Nivel: 1 – Ciegas: ${levelsConfig[0].blinds || "N/A"}`;
-      } else {
-        timerRemaining = 0;
-        timerInitial = 0;
-        document.getElementById("current-level").textContent =
-          `Nivel: 1 – Ciegas: N/A`;
-      }
-      timerEndTime = Date.now() + timerRemaining * 1000;
-      updateTimerDisplay();
-      database.ref("timerConfig").set(levelsConfig)
-        .then(() => {
-          alert("Configuración del temporizador guardada.");
-          saveTimerStateToDB();
-          document.getElementById("timer-config").classList.add("hidden");
-        })
-        .catch(error => {
-          console.error("Error al guardar la configuración:", error);
-          alert("Error al guardar la configuración.");
-        });
-    });
-  }
-  const toggleTimerConfigBtn = document.getElementById("toggle-timer-config-btn");
-  const timerConfig = document.getElementById("timer-config");
-  if (toggleTimerConfigBtn) {
-    toggleTimerConfigBtn.addEventListener("click", () => {
-      timerConfig.classList.toggle("hidden");
-    });
-  }
   updatePricesUI();
+  renderChipTypes();
 });
 
-const fullscreenToggleBtn = document.getElementById("toggle-fullscreen-btn");
-const fullscreenIcon = document.getElementById("fullscreen-icon");
-if (fullscreenToggleBtn) {
-  fullscreenToggleBtn.addEventListener("click", () => {
-    const timerSection = document.querySelector(".timer-section");
-    timerSection.classList.toggle("fullscreen");
-    if (timerSection.classList.contains("fullscreen")) {
-      fullscreenIcon.textContent = "fullscreen_exit";
-    } else {
-      fullscreenIcon.textContent = "fullscreen";
-    }
-  });
-}
