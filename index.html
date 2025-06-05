@@ -44,12 +44,12 @@
       <button id="logout-btn" class="logout-btn">Salir</button>
     </header>
 
-    <!-- Pestañas: Clientes, Métricas, Premios y Temporizador -->
+    <!-- Pestañas: Clientes, Métricas y Premios -->
     <div class="tabs">
       <div id="tab-clients" class="tab active">Clientes</div>
       <div id="tab-metrics" class="tab">Métricas</div>
+      <div id="tab-libre" class="tab">Libre</div>
       <div id="tab-premios" class="tab">Premios</div>
-      <div id="tab-timer" class="tab">Temporizador</div>
     </div>
 
     <main class="app-content">
@@ -96,6 +96,7 @@
           <i class="material-icons">file_download</i>
         </button>
 
+
         <!-- Lista de clientes -->
         <div class="client-cards" id="client-list">
           <!-- Tarjetas generadas dinámicamente -->
@@ -121,6 +122,23 @@
           <p id="total-fichas">Total de Fichas: 0</p>
           <p id="stack-promedio">Stack Promedio: 0</p>
         </div>
+
+      </section>
+
+      <!-- Sección Libre -->
+      <section id="libre-section" class="libre-section hidden">
+        <h2>Libre</h2>
+        <section class="chip-types-section">
+          <h3>Tipos de Ficha</h3>
+          <div id="chip-types-list" class="chip-types-list"></div>
+          <div class="chip-add">
+            <input id="chip-color" type="text" placeholder="Color">
+            <input id="chip-qty" type="number" placeholder="Cantidad">
+            <input id="chip-value" type="number" placeholder="Valor">
+            <button id="add-chip-type-btn" class="btn">Agregar Ficha</button>
+          </div>
+        </section>
+        <div class="client-cards" id="libre-client-list"></div>
       </section>
 
       <!-- Sección de Premios -->
@@ -138,70 +156,6 @@
         <p id="valor-restante">Valor Restante: 0</p>
       </section>
 
-      <!-- Sección del Temporizador -->
-      <section id="timer-section" class="timer-section hidden">
-        <div class="timer-controls">
-          <button id="start-timer-btn" class="btn timer-btn" title="Iniciar">
-            <i class="material-icons">play_arrow</i>
-          </button>
-          <button id="pause-timer-btn" class="btn timer-btn" title="Pausar">
-            <i class="material-icons">pause</i>
-          </button>
-          <button id="reset-timer-btn" class="btn timer-btn" title="Reiniciar Temporizador">
-            <i class="material-icons">restart_alt</i>
-          </button>
-          <button id="restart-level-btn" class="btn timer-btn" title="Reiniciar Nivel">
-            <i class="material-icons">replay</i>
-          </button>
-        </div>
-
-        <button id="toggle-fullscreen-btn" class="btn timer-btn" title="Pantalla completa">
-          <i class="material-icons" id="fullscreen-icon">fullscreen</i>
-        </button>
-
-        <div class="timer-card">
-          <div class="timer-header">
-            <h2>Temporizador de Torneos</h2>
-          </div>
-          <div class="timer-display">
-            <div class="timer-circle">
-              <svg class="circle-progress" viewBox="0 0 100 100">
-                <circle class="circle-bg" cx="50" cy="50" r="45"></circle>
-                <circle class="circle-fg" cx="50" cy="50" r="45"></circle>
-              </svg>
-              <div class="timer-text">
-                <p id="timer-countdown">00:00</p>
-              </div>
-            </div>
-            <p id="current-level" class="timer-level">Nivel: 1 – Ciegas: N/A</p>
-          </div>
-
-          <button id="toggle-timer-config-btn" class="btn timer-config-btn">Editar Configuración</button>
-          <div id="timer-config" class="timer-config hidden">
-            <h3>Configuración</h3>
-            <table class="level-table">
-              <thead>
-                <tr>
-                  <th>Nivel</th>
-                  <th>Ronda (min)</th>
-                  <th>Ciegas</th>
-                  <th>Eliminar</th>
-                </tr>
-              </thead>
-              <tbody id="levels-container">
-                <tr class="level">
-                  <td>1</td>
-                  <td><input type="number" class="round-duration" value="10"></td>
-                  <td><input type="text" class="blinds" placeholder="Ej. 50/100"></td>
-                  <td><button class="delete-level-btn btn">X</button></td>
-                </tr>
-              </tbody>
-            </table>
-            <button id="add-level-btn" class="btn">Agregar Nivel</button>
-            <button id="save-timer-config-btn" class="btn">Guardar Configuración</button>
-          </div>
-        </div>
-      </section>
     </main>
   </div>
 
