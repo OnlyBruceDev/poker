@@ -20,6 +20,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // NUEVA variable global con todos los clientes para filtrar
   let currentClients = {};
 
+  // Tipos de fichas configurados
+  let chipTypes = {};
+
   // Forzar cierre de sesión para desarrollo
   auth.signOut();
 
@@ -86,10 +89,27 @@ document.addEventListener("DOMContentLoaded", () => {
     alert("Precios actualizados");
   });
 
+  // Agregar tipo de ficha
+  document.getElementById("add-chip-type-btn")?.addEventListener("click", () => {
+    const name = document.getElementById("chip-name").value.trim();
+    const value = parseFloat(document.getElementById("chip-value").value) || 0;
+    if (!name) return alert("Ingresa nombre de ficha");
+    chipTypesRef.child(name).set({ value });
+    document.getElementById("chip-name").value = "";
+    document.getElementById("chip-value").value = "";
+  });
+
   /* =====================
        CLIENTES
   ===================== */
   const clientsRef = database.ref("clients");
+  const chipTypesRef = database.ref("chipTypes");
+
+  chipTypesRef.on("value", snapshot => {
+    chipTypes = snapshot.val() || {};
+    renderChipTypes();
+    renderClients(currentClients);
+  });
 
   clientsRef.on("value", snapshot => {
     currentClients = snapshot.val() || {};
@@ -101,6 +121,7 @@ document.addEventListener("DOMContentLoaded", () => {
     clientsRef.push({
       name,
       beerCounts: { Entrada: 0, Recompra: 0, Adicion: 0 },
+      chips: {},
       createdAt: firebase.database.ServerValue.TIMESTAMP
     });
   }
@@ -124,6 +145,11 @@ document.addEventListener("DOMContentLoaded", () => {
   function toggleBeerCount(clientKey, beerType) {
     const ref = database.ref(`clients/${clientKey}/beerCounts/${beerType}`);
     ref.transaction(val => (val === 1 ? 0 : 1));
+  }
+
+  function updateChipCount(clientKey, chipType, increment) {
+    const ref = database.ref(`clients/${clientKey}/chips/${chipType}`);
+    ref.transaction(count => Math.max(0, (count || 0) + increment));
   }
 
   function deleteClient(clientKey) {
@@ -228,6 +254,36 @@ incBtn.addEventListener("click", e => {
         countsDiv.appendChild(wrapper);
       });
 
+      // Mostrar fichas asignadas
+      Object.keys(chipTypes).forEach(type => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "client-card-count";
+        wrapper.innerHTML = `<span>${type}</span>`;
+
+        const count = (client.chips && client.chips[type]) || 0;
+        const val = document.createElement("span");
+        val.className = "count-value";
+        val.textContent = count;
+        wrapper.appendChild(val);
+
+        const controls = document.createElement("div");
+        controls.className = "count-controls";
+        controls.innerHTML = `
+          <button class="action-btn arrow-btn">&lt;</button>
+          <button class="action-btn arrow-btn">&gt;</button>`;
+        const [decBtn, incBtn] = controls.querySelectorAll("button");
+        decBtn.addEventListener("click", e => {
+          e.stopPropagation();
+          updateChipCount(key, type, -1);
+        });
+        incBtn.addEventListener("click", e => {
+          e.stopPropagation();
+          updateChipCount(key, type, 1);
+        });
+        wrapper.appendChild(controls);
+        countsDiv.appendChild(wrapper);
+      });
+
       card.appendChild(countsDiv);
 
       /* ---- TOTAL ---- */
@@ -278,6 +334,18 @@ incBtn.addEventListener("click", e => {
     document.getElementById("total-adiciones").textContent = `Total de Adiciones: ${adiciones}`;
     document.getElementById("total-fichas").textContent    = `Total de Fichas: ${totalFichas.toLocaleString()}`;
     document.getElementById("stack-promedio").textContent  = `Stack Promedio: ${stackProm.toLocaleString()}`;
+  }
+
+  function renderChipTypes() {
+    const list = document.getElementById("chip-types-list");
+    if (!list) return;
+    list.innerHTML = "";
+    Object.entries(chipTypes).forEach(([name, cfg]) => {
+      const div = document.createElement("div");
+      div.className = "chip-type-item";
+      div.textContent = `${name}: $${(cfg.value || 0)}`;
+      list.appendChild(div);
+    });
   }
 
 
@@ -641,6 +709,7 @@ incBtn.addEventListener("click", e => {
     });
   }
   updatePricesUI();
+  renderChipTypes();
 });
 
 const fullscreenToggleBtn = document.getElementById("toggle-fullscreen-btn");

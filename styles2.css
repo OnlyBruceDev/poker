@@ -446,6 +446,32 @@ footer {
 }
 
 /* =====================
+   TIPOS DE FICHAS
+======================= */
+.chip-types-section {
+  margin-top: 20px;
+}
+.chip-types-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.chip-type-item {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+.chip-add input {
+  margin: 5px;
+  padding: 6px;
+  border-radius: 4px;
+  border: none;
+  text-align: center;
+}
+
+/* =====================
    SECCIÓN DE PREMIOS
 ======================= */
 .premios-section {
