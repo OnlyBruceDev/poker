@@ -47,6 +47,7 @@
     <!-- Pestañas: Clientes, Métricas, Premios y Temporizador -->
     <div class="tabs">
       <div id="tab-clients" class="tab active">Clientes</div>
+      <div id="tab-libre" class="tab">Libre</div>
       <div id="tab-metrics" class="tab">Métricas</div>
       <div id="tab-premios" class="tab">Premios</div>
       <div id="tab-timer" class="tab">Temporizador</div>
@@ -100,6 +101,25 @@
         <div class="client-cards" id="client-list">
           <!-- Tarjetas generadas dinámicamente -->
         </div>
+      </section>
+
+      <!-- Sección Libre -->
+      <section id="libre-section" class="client-section hidden">
+        <div class="libre-config">
+          <label for="libre-chip-value">Valor de Ficha:</label>
+          <input id="libre-chip-value" type="number" value="1">
+        </div>
+        <div class="client-add">
+          <input id="libre-client-name" type="text" placeholder="Nombre del cliente">
+          <button id="add-libre-client-btn" class="btn-add">Agregar</button>
+        </div>
+        <div class="client-search">
+          <input id="libre-client-search" type="text" placeholder="Buscar jugador…">
+        </div>
+        <div class="revenue">
+          <p id="libre-total-revenue">Total Recaudado: $0</p>
+        </div>
+        <div class="client-cards" id="libre-client-list"></div>
       </section>
 
       <!-- Sección de Métricas -->
